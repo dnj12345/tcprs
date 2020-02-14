@@ -4,7 +4,7 @@
 
 #include "NetVar.h"
 #include "File.h"
-#include "OSFinger.h"
+//#include "OSFinger.h"
 #include "Event.h"
 
 #include "analyzer/protocol/pia/PIA.h"
@@ -92,11 +92,11 @@ void TCPRS_Analyzer::ConfigSummary() {
 
         vl->append(BuildConnVal());
         vl->append(new Val(current_timestamp, TYPE_TIME));
-        vl->append(new Val(TSOptionEnabled(), TYPE_BOOL));          //Were timestamps enabled?
-        vl->append(new Val(bad_connection, TYPE_BOOL));             //Was this a bad connection?
-        vl->append(new Val(sack_in_use, TYPE_BOOL));                //Did the connection actually use sack?
-        vl->append(new Val(orig->isSACKEnabled(), TYPE_BOOL));        //Did client offer sack?
-        vl->append(new Val(resp->isSACKEnabled(), TYPE_BOOL));        //Did server offer sack?
+        vl->append(val_mgr->GetBool(TSOptionEnabled()));          //Were timestamps enabled?
+        vl->append(val_mgr->GetBool(bad_connection));             //Was this a bad connection?
+        vl->append(val_mgr->GetBool(sack_in_use));                //Did the connection actually use sack?
+        vl->append(val_mgr->GetBool(orig->isSACKEnabled()));        //Did client offer sack?
+        vl->append(val_mgr->GetBool(resp->isSACKEnabled()));        //Did server offer sack?
 
         TCP()->ConnectionEvent(TCPRS::conn_config, vl);
     }

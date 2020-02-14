@@ -209,14 +209,14 @@ protected:
 	Dictionary expectedAcks;
 
 	// basically the key set for expected_acks, just sorted, and comes with ranges. (so really not the key set at all.)
-	PList(SequenceRange) outstandingData;
+	PList<SequenceRange> outstandingData;
 
-	PList(double) timeouts;
+	PList<double> timeouts;
 
 	//Spurious Rexmit Detection
-	PList(ACK) acks;
-	PList(ACK) dsacks;
-	PList(SEGMENT) rexmits;
+	PList<ACK> acks;
+	PList<ACK> dsacks;
+	PList<SEGMENT> rexmits;
 
 	// The sequence pair should be removed once a higher sequence has been ack'd
 	Dictionary duplicateAcknowledgments;

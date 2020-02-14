@@ -345,26 +345,29 @@ Segment* TCPRS_Endpoint::removeSequenceNumber(uint32 seq) {
 void TCPRS_Endpoint::rebuildRange(SequenceRange* range) {
 	SequenceRange* seq = NULL;
 	Segment* packet = NULL;
-	PList(SequenceRange) holding;
+	PList<SequenceRange> holding;
 
 	for (int i = outstandingData.length() - 1; i >= 0; i--) {
 		seq = outstandingData[i];
 		//If the sequence to ack is less than or equal to the range to ack...
 		if (seq && Sequence_number_comparison(seq->to_ack, range->to_ack) < 1) {
-			seq = outstandingData.remove(seq);
-			//If the range consists of part of this range, then we need to
-			//  reconstruct this.
-			if (seq->min >= range->min) {
-				packet = removeSequenceNumber(seq->to_ack);
+			int pos = outstandingData.member_pos(seq);    // zeek 3.0.1 way of removing.
+			if (pos >= 0) {
+				seq = outstandingData.remove_nth(pos);
 
-				if (packet) {
-					delete packet;
-					packet = NULL;
+				//If the range consists of part of this range, then we need to
+				//  reconstruct this.
+				if (seq->min >= range->min) {
+					packet = removeSequenceNumber(seq->to_ack);
+
+					if (packet) {
+						delete packet;
+						packet = NULL;
+					}
+
+					delete seq;
+					seq = NULL;
 				}
-
-				delete seq;
-				seq = NULL;
-
 			}
 
 			//If a sequence exists, then range does not cover the entire seq_range
@@ -372,7 +375,7 @@ void TCPRS_Endpoint::rebuildRange(SequenceRange* range) {
 			if (seq) {
 				//if (!outstandingData.is_member(seq, Reverse_sequence_range_comparison)) { // want a set, not a list
 				if (!outstandingData.is_member(seq)) { // want a set, not a list
-					holding.insert(seq);
+					holding.push_front(seq);
 				} else {
 					delete seq;
 					seq = NULL;
@@ -387,8 +390,9 @@ void TCPRS_Endpoint::rebuildRange(SequenceRange* range) {
 
 	while (holding.length() > 0) {
 		//Reinsert the elements that were taken out while iterating the list.
-		outstandingData.sortedinsert(holding.get(),
-				Reverse_sequence_range_comparison);
+		outstandingData.push_front(holding.back());
+		//outstandingData.sortedinsert(holding.pop_back(),
+		//		Reverse_sequence_range_comparison);
 	}
 
 	//Range covers the lower portion of this sequence, we need to resize and reinsert
@@ -613,8 +617,9 @@ void TCPRS_Endpoint::insertSequenceNumber(SequenceRange *sequence,
 	//Setlike list
 	if (sequenceWrapLtEq(highestSequence, sequence->min)
 			|| !isMemberOutstanding(sequence))
-		outstandingData.sortedinsert(sequence,
-				Reverse_sequence_range_comparison);
+		//outstandingData.sortedinsert(sequence,
+		//		Reverse_sequence_range_comparison);
+		outstandingData.push_front(sequence);
 	else
 		delete sequence;
 
@@ -1525,9 +1530,9 @@ void TCPRS_Endpoint::examinePotentialSpuriousRexmits() {
 
 	//double cutoff;
 	SEGMENT* seg;
-	PList(SEGMENT) current_rexmits;
-	PList(ACK) current_acks;
-	PList(ACK) current_dsacks;
+	PList<SEGMENT> current_rexmits;
+	PList<ACK> current_acks;
+	PList<ACK> current_dsacks;
 	double oldest_rexmit_ts;
 	double last_ack;
 	bool is_spurious;
@@ -1573,7 +1578,7 @@ void TCPRS_Endpoint::examinePotentialSpuriousRexmits() {
 		//  place them into the current_rexmits list
 		loop_over_list(rexmits, i) {
 			if (seg->min == rexmits[i]->min) {
-				current_rexmits.insert(rexmits[i]);
+				current_rexmits.push_front(rexmits[i]);
 				if (rexmits[i]->timestamp
 						> oldest_rexmit_ts|| IS_UNDEFINED(oldest_rexmit_ts)) {
 					oldest_rexmit_ts = rexmits[i]->timestamp;
@@ -1592,7 +1597,7 @@ void TCPRS_Endpoint::examinePotentialSpuriousRexmits() {
 
 			/*&& acks[k]->timestamp <= (oldest_rexmit_ts + acks[k]->rtt1 + acks[k]->rttvar)*/
 			if (sequenceWrapLtEq(seg->to_ack, acks[k]->ack_seq)) {
-				current_acks.insert(acks[k]);
+				current_acks.push_front(acks[k]);
 				if (IS_UNDEFINED(last_ack) || last_ack < acks[k]->timestamp)
 					last_ack = acks[k]->timestamp;
 			}
@@ -1604,7 +1609,7 @@ void TCPRS_Endpoint::examinePotentialSpuriousRexmits() {
 					continue;
 
 				if (sequenceWrapLtEq(seg->min, acks[k]->ack_seq))
-					current_acks.insert(acks[k]);
+					current_acks.push_front(acks[k]);
 			}
 			last_ack = acks[0]->timestamp;
 		}
@@ -1615,7 +1620,7 @@ void TCPRS_Endpoint::examinePotentialSpuriousRexmits() {
 
 			/*&& dsacks[k]->timestamp <= (oldest_rexmit_ts + dsacks[k]->rtt1 + dsacks[k]->rttvar)*/
 			if (dsacks[k]->ack_seq == seg->min) {
-				current_dsacks.insert(dsacks[k]);
+				current_dsacks.push_front(dsacks[k]);
 			}
 		}
 		//It is really only possible to determine retransmissions such that only
@@ -1914,7 +1919,7 @@ Segment* TCPRS_Endpoint::acknowledgeSequences(uint32 sequence,
 	Segment *segment = NULL;
 	Segment *ret = NULL;
 	bool bad_sample = false;
-	SequenceRange *range_key = outstandingData.get();
+	SequenceRange *range_key = outstandingData.back();
 	//  This is the cumulative acknowledgement
 	while (range_key
 			&& Sequence_number_comparison(range_key->to_ack, sequence) < 1) {
@@ -1953,15 +1958,15 @@ Segment* TCPRS_Endpoint::acknowledgeSequences(uint32 sequence,
 		}
 
 		delete range_key;
-		range_key = outstandingData.get();
+		range_key = outstandingData.back();
 	}
 
 	//If a segment is outstanding but it is not part of this acknowledgement,
 	// then it needs to be placed into the list again.
-	if (range_key
-			&& Sequence_number_comparison(range_key->to_ack, sequence) == 1) {
-		outstandingData.sortedinsert(range_key,
-				Reverse_sequence_range_comparison);
+	if (range_key && Sequence_number_comparison(range_key->to_ack, sequence) == 1) {
+		outstandingData.push_front(range_key);
+		//outstandingData.sortedinsert(range_key,
+		//		Reverse_sequence_range_comparison);
 		range_key = NULL;
 	} else if (range_key) {
 		delete range_key;
@@ -2192,7 +2197,7 @@ void TCPRS_Endpoint::processRTO(Segment* packet, SequenceRange* seq,
 			vl->append(analyzer->BuildConnVal());
 			vl->append(new Val(current_time, TYPE_TIME));
 			vl->append(new Val(estimatedRTO, TYPE_DOUBLE));
-			vl->append(new Val(isOrig(),TYPE_BOOL));
+			vl->append(val_mgr->GetBool(isOrig()));
 
 			analyzer->ConnectionEvent(TCPRS::conn_initial_rto, vl);
 		}
@@ -2318,9 +2323,9 @@ void TCPRS_Endpoint::throwCongestionStateChangeEvent(CongestionState prev,
 		val_list *vl = new val_list;
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(prev, TYPE_INT));
-		vl->append(new Val(current, TYPE_INT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetInt(prev));
+		vl->append(val_mgr->GetInt(current));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 
 		analyzer->ConnectionEvent(TCPRS::conn_state_change, vl);
 	}
@@ -2349,17 +2354,17 @@ void TCPRS_Endpoint::throwRetransmissionEvent(Segment* segment, uint32 seq,
 
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 		vl->append(new Val(est_rtt, TYPE_DOUBLE));
-		vl->append(new Val(congestionState, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
-		vl->append(new Val(reason, TYPE_INT));
-		vl->append(new Val(rtype, TYPE_INT));
+		vl->append(val_mgr->GetInt(congestionState));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
+		vl->append(val_mgr->GetInt(reason));
+		vl->append(val_mgr->GetInt(rtype));
 		vl->append(new Val(confidence, TYPE_DOUBLE));
-		vl->append(new Val(flags, TYPE_INT));
+		vl->append(val_mgr->GetInt(flags));
 
 		analyzer->ConnectionEvent(TCPRS::conn_rexmit, vl);
 	}
@@ -2373,15 +2378,15 @@ void TCPRS_Endpoint::throwSpuriousRetransmissionEvent(uint32 seq, double ts,
 
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(ts, TYPE_TIME));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 		vl->append(new Val(confidence, TYPE_DOUBLE));
-		vl->append(new Val(congestionState, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
-		vl->append(new Val(reason, TYPE_INT));
-		vl->append(new Val(rtype, TYPE_INT));
+		vl->append(val_mgr->GetInt(congestionState));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
+		vl->append(val_mgr->GetInt(reason));
+		vl->append(val_mgr->GetInt(rtype));
 
 		analyzer->ConnectionEvent(TCPRS::conn_spurious_dsack, vl);
 	}
@@ -2392,9 +2397,9 @@ void TCPRS_Endpoint::throwDuplicateAckEvent(uint32 seq, uint32 num_rtx) {
 		val_list *vl = new val_list;
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(seq + startSeq(), TYPE_INT));
-		vl->append(new Val(num_rtx, TYPE_INT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetInt(seq + startSeq()));
+		vl->append(val_mgr->GetInt(num_rtx));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 
 		analyzer->ConnectionEvent(TCPRS::tcp_dup_ack, vl);
 	}
@@ -2406,8 +2411,8 @@ void TCPRS_Endpoint::throwConnectionDeadEvent(double duration) {
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
 		vl->append(new Val(duration, TYPE_DOUBLE));
-		vl->append(new Val(congestionState, TYPE_INT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetInt(congestionState));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 
 		analyzer->ConnectionEvent(TCPRS::conn_dead_event, vl);
 	}
@@ -2419,14 +2424,14 @@ void TCPRS_Endpoint::throwReorderingEvent(uint32 seq, double gap, double rtt,
 		val_list *vl = new val_list;
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
+		vl->append(val_mgr->GetBool(connectionOrigin));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
 		vl->append(new Val(gap, TYPE_DOUBLE));
 		vl->append(new Val(rtt, TYPE_DOUBLE));
-		vl->append(new Val(seq_difference, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
+		vl->append(val_mgr->GetInt(seq_difference));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
 
 		analyzer->ConnectionEvent(TCPRS::conn_ooo_event, vl);
 	}
@@ -2438,13 +2443,13 @@ void TCPRS_Endpoint::throwAmbiguousReorderingEvent(uint32 seq, double gap,
 		val_list *vl = new val_list;
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
+		vl->append(val_mgr->GetBool(connectionOrigin));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
 		vl->append(new Val(gap, TYPE_DOUBLE));
-		vl->append(new Val(seq_difference, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
+		vl->append(val_mgr->GetInt(seq_difference));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
 
 		analyzer->ConnectionEvent(TCPRS::conn_ambi_order, vl);
 	}
@@ -2486,13 +2491,13 @@ void TCPRS_Endpoint::throwLimitedTransmitEvent(uint32 seq) {
 
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 		vl->append(new Val(est_rtt, TYPE_DOUBLE));
-		vl->append(new Val(congestionState, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
+		vl->append(val_mgr->GetInt(congestionState));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
 
 		analyzer->ConnectionEvent(TCPRS::conn_limited_transmit, vl);
 	}
@@ -2508,13 +2513,13 @@ void TCPRS_Endpoint::throwFastRecoveryTransmitEvent(uint32 seq) {
 
 		vl->append(analyzer->BuildConnVal());
 		vl->append(new Val(current_time, TYPE_TIME));
-		vl->append(new Val(seq + startSeq(), TYPE_COUNT));
-		vl->append(new Val(connectionOrigin, TYPE_BOOL));
+		vl->append(val_mgr->GetCount(seq + startSeq()));
+		vl->append(val_mgr->GetBool(connectionOrigin));
 		vl->append(new Val(est_rtt, TYPE_DOUBLE));
-		vl->append(new Val(congestionState, TYPE_INT));
-		vl->append(new Val(startSeq(), TYPE_COUNT));
-		vl->append(new Val(peer->highestAcknowledgement, TYPE_COUNT));
-		vl->append(new Val(highestSequence, TYPE_COUNT));
+		vl->append(val_mgr->GetInt(congestionState));
+		vl->append(val_mgr->GetCount(startSeq()));
+		vl->append(val_mgr->GetCount(peer->highestAcknowledgement));
+		vl->append(val_mgr->GetCount(highestSequence));
 
 		analyzer->ConnectionEvent(TCPRS::conn_fast_recovery, vl);
 	}
@@ -2585,7 +2590,7 @@ void TCPRS_Endpoint::processACK(const uint32 normalizedAckSequence,
 	    	vl->append(analyzer->BuildConnVal());
 	    	vl->append(new Val(current_time, TYPE_TIME));
 	    	vl->append(new Val(getPathRTTEstimate(),TYPE_DOUBLE));
-	    	vl->append(new Val(isOrig(),TYPE_BOOL));
+		vl->append(val_mgr->GetBool(isOrig()));
 
 	    	analyzer->ConnectionEvent(TCPRS::conn_initial_rtt, vl);
 	    }

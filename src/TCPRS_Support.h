@@ -547,6 +547,7 @@ protected:
 };
 
 /* List declarations */
+#if 0
 declare(PList, uint32);
 declare(PList, double);
 declare(PList, SequenceRange);
@@ -555,6 +556,7 @@ declare(PList, DuplicateAck);
 declare(PList, CongestionState);
 declare(PList, SEGMENT);
 declare(PList, ACK);
+#endif
 
 } }
 
