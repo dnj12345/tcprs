@@ -4,8 +4,8 @@
 @load ./tcp_options
 @load ./tcp_recovery
 @load ./tcp_rtt
-@load ./tcp_osfp
+#@load ./tcp_osfp
 
-event bro_init() {
+event zeek_init() {
 	TCPRS::EnableTCPRSAnalyzer();
 }

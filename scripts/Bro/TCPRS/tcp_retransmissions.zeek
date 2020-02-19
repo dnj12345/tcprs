@@ -29,7 +29,7 @@ export {
 }
 
 # TCP Retransmissions log init
-event bro_init() &priority=5
+event zeek_init() &priority=5
     {
         Log::create_stream(TCPRETRANSMISSIONS::LOG, [$columns=Info]);
     }

@@ -22,7 +22,7 @@ export {
 }
 
 # TCP round-trip time log init
-event bro_init() &priority=5
+event zeek_init() &priority=5
     {
         Log::create_stream(TCPRTT::LOG, [$columns=Info]);
     }

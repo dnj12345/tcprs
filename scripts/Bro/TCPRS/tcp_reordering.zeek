@@ -23,14 +23,14 @@ export {
     global log_tcp_reordering: event(rec: Info);
 }
 
-event bro_init() &priority=5
+event zeek_init() &priority=5
     {
         Log::create_stream(TCPREORDERING::LOG, [$columns=Info]);
     }
 
-    
+
 # TCP reordering event
-# 
+#
 # This is generated when TCPRS detects the presence of a reordering
 #   event in a connection
 #   

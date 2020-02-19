@@ -21,7 +21,7 @@ export {
 }
 
 # TCP options log init
-event bro_init() &priority=5
+event zeek_init() &priority=5
     {
         Log::create_stream(TCPOPTIONS::LOG, [$columns=Info]);
     }
